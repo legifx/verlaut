@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT key_id, public_key, signature FROM kyber_prekeys WHERE identity_key = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "public_key",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "signature",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "34b8640d4c0c2a348e286ca0c84b58ce191ad17502b3efae66d9175fb647d8f4"
+}

@@ -1,0 +1,44 @@
+# Rust
+/server/target/
+/client/src-tauri/target/
+**/*.rs.bk
+
+# sqlx: .sqlx WIRD committet (Offline-Query-Daten), nur der Cache nicht
+# (nichts extra zu ignorieren)
+
+# Node / Vite
+node_modules/
+/client/dist/
+.vite/
+
+# Secrets & lokale Konfig — NIEMALS committen
+.env
+deploy/.env
+*.pem
+*.key
+*.crt
+*.keystore
+
+# Kompilierte Binaries / Laufzeit-Artefakte (nicht ins Repo)
+/bin/
+*.log
+*.idsig
+__pycache__/
+*.pyc
+
+# Gebaute APK (nutzer-/serverspezifisch: enthält die eingebettete Server-URL).
+# Jede Installation baut ihre eigene via android/build.sh.
+android/verlaut.apk
+client/public/verlaut.apk
+
+# Lokale, at-rest verschlüsselte Client-DB
+*.sqlcipher
+*.db
+
+# OS
+.DS_Store
+
+# WASM-Build-Artefakte (regenerierbar)
+/client/src/crypto/pkg/
+/client/crypto-wasm/pkg-node/
+/client/crypto-wasm/pkg/

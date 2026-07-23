@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO kyber_prekeys (identity_key, key_id, public_key, signature)\n         VALUES ($1, $2, $3, $4)\n         ON CONFLICT (identity_key) DO UPDATE\n           SET key_id = EXCLUDED.key_id,\n               public_key = EXCLUDED.public_key,\n               signature = EXCLUDED.signature,\n               updated_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int4",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "29f98876e879fda6e9e319b781ec07ebec3f0b85f3160753fdbad15960a40d28"
+}

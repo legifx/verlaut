@@ -1,0 +1,55 @@
+# Verlaut — Laufzeit auf DIESEM Server (Tailscale-only, kein VPS).
+#
+# Nur die zustandsbehafteten Dienste laufen im Container; der verlaut-server
+# läuft NATIV (systemd-user), bindet an die Tailscale-IP und spricht die
+# Dienste über localhost an. Grund: der Rust-Build muss nicht ein zweites Mal
+# im Container passieren (schont die Root-HDD), und at-rest bleibt alles lokal.
+#
+# Alle Ports NUR auf 127.0.0.1 — von außen ist ausschließlich der native
+# Server über das Tailnet erreichbar.
+
+name: verlaut-svc
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: verlaut
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev-local-change-me}
+      POSTGRES_DB: verlaut
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"
+    command: ["postgres", "-c", "log_statement=none", "-c", "log_connections=off"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verlaut"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    restart: unless-stopped
+    command: ["serve"]
+    environment:
+      NTFY_BASE_URL: "http://127.0.0.1:2586"
+      NTFY_LISTEN_HTTP: ":80"
+    ports:
+      - "127.0.0.1:2586:80"
+
+volumes:
+  pgdata:

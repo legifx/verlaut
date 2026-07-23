@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM offline_envelopes WHERE id = $1 AND destination_identity_key = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c3ac135a78b5c9d5a54ae5b43ede1f440d9759427ab6466223aece02efc77ef2"
+}

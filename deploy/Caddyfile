@@ -1,0 +1,22 @@
+# Verlaut Reverse Proxy — Auto-TLS, WebSocket-Durchreichung.
+# {$VERLAUT_DOMAIN} kommt aus deploy/.env. Hinter Tailscale kann statt einer
+# öffentlichen Domain auch die MagicDNS-Adresse stehen (dann interne CA).
+
+{$VERLAUT_DOMAIN} {
+	encode gzip
+
+	# WebSocket + REST an den Server. Caddy reicht Upgrade-Header automatisch durch.
+	reverse_proxy server:8080
+
+	# Zero-Logs-Ziel: keine Access-Logs, keine IP-Speicherung.
+	log {
+		output discard
+	}
+
+	header {
+		# Keine Referrer-/Sniffing-Leaks.
+		Referrer-Policy "no-referrer"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+}

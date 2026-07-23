@@ -1,0 +1,56 @@
+[package]
+name = "verlaut-server"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "AGPL-3.0-or-later"
+description = "Verlaut — dumb, metadata-minimizing relay for an E2E-encrypted messenger"
+publish = false
+
+[dependencies]
+# Web / async
+axum = { version = "0.8", features = ["ws", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "limit", "fs", "set-header"] }
+futures-util = "0.3"
+
+# Wire format
+prost = "0.13"
+
+# DB / Queue
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio-rustls", "postgres", "macros", "migrate", "uuid", "chrono",
+] }
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+
+# Krypto (NUR Verify/Random — keine eigene Primitive).
+# libsignal-core liefert dieselbe XEdDSA-Verifikation wie der Client -> exakte
+# Kompatibilität. Kein ed25519-dalek: libsignal nutzt XEdDSA über Curve25519.
+libsignal-core = { git = "https://github.com/signalapp/libsignal", tag = "v0.94.3" }
+rand = "0.8"
+subtle = "2.6"          # konstante-Zeit-Vergleiche
+base64 = "0.22"         # Transport-Encoding (kein selbstgebautes Parsing)
+
+# Push
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
+# Serde / IDs / Zeit
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Fehler / Logging
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[build-dependencies]
+prost-build = "0.13"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

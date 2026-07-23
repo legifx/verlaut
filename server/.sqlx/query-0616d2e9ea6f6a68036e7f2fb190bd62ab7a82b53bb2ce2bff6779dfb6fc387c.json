@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO offline_envelopes (destination_identity_key, payload, expires_at)\n         VALUES ($1, $2, $3)\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0616d2e9ea6f6a68036e7f2fb190bd62ab7a82b53bb2ce2bff6779dfb6fc387c"
+}

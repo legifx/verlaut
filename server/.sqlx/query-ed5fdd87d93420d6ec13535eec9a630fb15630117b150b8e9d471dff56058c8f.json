@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE signed_prekeys\n               SET key_id = $2, public_key = $3, signature = $4, updated_at = now()\n             WHERE identity_key = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int4",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ed5fdd87d93420d6ec13535eec9a630fb15630117b150b8e9d471dff56058c8f"
+}

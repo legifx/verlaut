@@ -1,0 +1,137 @@
+syntax = "proto3";
+
+// Verlaut wire format — versioned, Signal-inspired.
+//
+// GRUNDSATZ: Der Server versteht NUR die Routing-Hülle. Alles unter
+// `Envelope.ciphertext` ist eine libsignal-Nachricht (Double Ratchet /
+// PreKeySignalMessage) und für den Server opak. Der Server darf `ciphertext`
+// niemals interpretieren, loggen oder persistieren-im-Klartext.
+//
+// Phase 1: `source_identity_key` liegt im Klartext in der Hülle (nötig fürs
+//          Routing der Empfangsbestätigung an den Absender).
+// Phase 2: Sealed Sender — `source_identity_key` entfällt, ersetzt durch ein
+//          verschlüsseltes Sender-Zertifikat im `ciphertext`; der Server kennt
+//          dann nur noch die Empfänger-Queue.
+
+package verlaut.v1;
+
+// ---------------------------------------------------------------------------
+// Persistente Zustell-Hülle (Redis-Queue / Postgres-Fallback)
+// ---------------------------------------------------------------------------
+
+message Envelope {
+  // Wire-Version. Erlaubt spätere Formatänderungen ohne Bruch.
+  uint32 version = 1;
+
+  enum Type {
+    UNKNOWN = 0;
+    // libsignal PreKeySignalMessage (erster Kontakt, X3DH).
+    PREKEY = 1;
+    // libsignal SignalMessage (etablierte Double-Ratchet-Session).
+    CIPHERTEXT = 2;
+    // Verschlüsselter Anhang-Deskriptor (Phase 3).
+    ATTACHMENT = 3;
+  }
+  Type type = 2;
+
+  // Empfänger-Identität (Ed25519 Public Key, 32 Byte roh). Das EINZIGE, was
+  // der Server zum Routen braucht. Wird als Queue-Schlüssel verwendet.
+  bytes destination_identity_key = 3;
+
+  // Absender-Identität (Ed25519 Public Key, 32 Byte). Nur Phase 1.
+  // In Phase 2 entfernt (Sealed Sender). Der Server nutzt das NICHT für
+  // Speicherung von Kontaktbeziehungen — ausschließlich für die ACK-Route.
+  bytes source_identity_key = 4;
+
+  // Ziel-Device (Multi-Device später). Phase 1: immer 1.
+  uint32 destination_device_id = 5;
+
+  // Server-Empfangszeit in ms seit Epoch. Vom Server gesetzt, für TTL/Reaper.
+  // KEINE clientseitige Zeit im Klartext (Metadaten-Minimierung).
+  uint64 server_timestamp = 6;
+
+  // Die eigentliche Ende-zu-Ende-verschlüsselte libsignal-Nachricht.
+  // Für den Server vollständig opak.
+  bytes ciphertext = 7;
+
+  // Server-vergebene Queue-ID (UUID, 16 Byte). NUR bei Inbound-Zustellung
+  // gesetzt; der Client schickt sie in `DeliveryAck` zurück, woraufhin der
+  // Server den gepufferten Envelope löscht. Beim Outbound leer.
+  bytes server_id = 8;
+
+  // In Phase 2: Padding auf feste Blockgröße gegen Traffic-Analyse.
+  // Vom Empfänger-Client verworfen.
+  bytes padding = 15;
+}
+
+// ---------------------------------------------------------------------------
+// WebSocket-Kontroll-Frames (Client <-> Server, KEINE Nutzinhalte)
+// ---------------------------------------------------------------------------
+
+// Alles, was über den WS-Kanal läuft, ist ein Frame. `oneof` hält genau
+// eine Payload.
+message Frame {
+  uint64 id = 1; // Client-gewählte Korrelations-ID für Request/Response.
+
+  oneof payload {
+    // --- Auth (Signatur-Challenge, keine Passwörter) ---
+    AuthChallengeRequest  auth_challenge_request  = 10;
+    AuthChallenge         auth_challenge          = 11;
+    AuthResponse          auth_response           = 12;
+    AuthResult            auth_result             = 13;
+
+    // --- Zustellung ---
+    Envelope              outbound                = 20; // Client -> Server
+    Envelope              inbound                 = 21; // Server -> Client
+    DeliveryAck           delivery_ack            = 22; // Client -> Server (nach Empfang)
+    ServerAck             server_ack              = 23; // Server -> Client (angenommen/gequeued)
+
+    // --- Fehler ---
+    ProtocolError         error                   = 90;
+  }
+}
+
+// Client fordert eine Nonce an, indem er seinen Identity Key nennt.
+message AuthChallengeRequest {
+  bytes identity_key = 1; // Ed25519 pub, 32 Byte
+}
+
+// Server antwortet mit einer zufälligen Nonce, die der Client signiert.
+message AuthChallenge {
+  bytes nonce = 1;       // 32 zufällige Byte, serverseitig kurzlebig gecached
+  uint64 expires_at = 2; // ms Epoch; Nonce verfällt schnell (z. B. 30 s)
+}
+
+// Client signiert die Nonce mit seinem Identity Private Key.
+message AuthResponse {
+  bytes identity_key = 1; // muss zur Challenge-Anfrage passen
+  bytes signature = 2;    // Ed25519-Signatur über `nonce`
+}
+
+message AuthResult {
+  bool ok = 1;
+  string reason = 2; // nur für Debug am Client, kein Server-Log
+}
+
+// Server bestätigt Annahme einer ausgehenden Nachricht (gequeued/zugestellt).
+message ServerAck {
+  uint64 frame_id = 1; // korreliert mit Frame.id des Outbound-Envelopes
+}
+
+// Client bestätigt Empfang eines Inbound-Envelopes -> Server löscht sofort.
+message DeliveryAck {
+  bytes envelope_id = 1; // serverseitige Queue-ID des zugestellten Envelopes
+}
+
+message ProtocolError {
+  enum Code {
+    UNKNOWN = 0;
+    UNAUTHENTICATED = 1;
+    RATE_LIMITED = 2;
+    BAD_REQUEST = 3;
+    DESTINATION_UNKNOWN = 4;
+    PAYLOAD_TOO_LARGE = 5;
+  }
+  Code code = 1;
+  string detail = 2;
+}

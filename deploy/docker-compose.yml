@@ -1,0 +1,91 @@
+# Verlaut — vollständiger Self-Hosting-Stack.
+# server + postgres + redis + ntfy + caddy (Auto-TLS / Reverse Proxy).
+#
+# Vor dem ersten Start: `cp deploy/.env.example deploy/.env` und Werte setzen.
+# Ohne DB beim Build siehe deploy/README.md (cargo sqlx prepare).
+
+name: verlaut
+
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      VERLAUT_BIND: "0.0.0.0:8080"
+      DATABASE_URL: "postgres://verlaut:${POSTGRES_PASSWORD}@postgres:5432/verlaut"
+      REDIS_URL: "redis://redis:6379"
+      NTFY_BASE_URL: "http://ntfy:80"
+      RUST_LOG: "info"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [internal]
+    # Kein direkter Port-Expose: nur über Caddy erreichbar.
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: verlaut
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: verlaut
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verlaut"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [internal]
+    # Zero-Logs-Ziel: minimale Log-Ausgabe.
+    command: ["postgres", "-c", "log_statement=none", "-c", "log_connections=off"]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Ephemer: kein Persistenz-Volume (Presence/Nonces sind flüchtig).
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [internal]
+
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    restart: unless-stopped
+    command: ["serve"]
+    environment:
+      NTFY_BASE_URL: "${NTFY_PUBLIC_URL}"
+      NTFY_LISTEN_HTTP: ":80"
+    networks: [internal]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      VERLAUT_DOMAIN: ${VERLAUT_DOMAIN}
+    depends_on: [server]
+    networks: [internal]
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
