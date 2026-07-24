@@ -81,6 +81,7 @@ Tiefer:
 server/    Rust + Axum — Relay, PreKeys, Queue, Push, Nutzerverzeichnis
 client/    React + TS + Vite (PWA) — libsignal-WASM, Medien, UI
 android/   Gradle-loser WebView-APK-Wrapper (aapt2/d8/apksigner)
+desktop/   Electron-Container für Windows/Linux/Mac (echte Download-App)
 shared/    envelope.proto — gemeinsames Wire-Format
 deploy/    docker-compose + Caddy + .env.example
 docs/      PROTOCOL / THREAT_MODEL / MULTIDEVICE / SELF_HOSTING
@@ -142,8 +143,10 @@ Deine App-Adresse ist dann z. B. `https://<hostname>.<tailnet>.ts.net:8444` —
 
 - **Android:** APK herunterladen und installieren (einmalig „unbekannte
   Quellen" für den Browser erlauben).
-- **Windows / Linux / Mac:** in Chrome/Edge über *App installieren* — Verlaut
-  läuft dann als eigenständige Desktop-App.
+- **Windows:** die `.zip`-App herunterladen, entpacken, `Verlaut.exe` starten
+  (portabel, keine Installation; unsigniert → SmartScreen einmal bestätigen).
+- **Linux / Mac / alternativ Windows:** in Chrome/Edge über *App installieren* —
+  Verlaut läuft als eigenständige Desktop-App. Native Pakete via `desktop/`.
 
 Beim ersten Start: Username wählen → fertig. Dein privater Schlüssel wird
 **lokal auf dem Gerät** erzeugt und verlässt es nie.

@@ -42,3 +42,11 @@ client/public/verlaut.apk
 /client/src/crypto/pkg/
 /client/crypto-wasm/pkg-node/
 /client/crypto-wasm/pkg/
+
+# Gebaute Desktop-App (Build-Artefakt, groß)
+*.zip
+verlaut-windows.zip
+desktop/out/
+desktop/node_modules/
+desktop/.electron-cache/
+desktop/.npm/

@@ -1,0 +1,9 @@
+{
+  "name": "verlaut",
+  "productName": "Verlaut",
+  "version": "0.2.0",
+  "description": "Verlaut — E2E-verschlüsselter, self-hosted Messenger (Desktop)",
+  "main": "main.js",
+  "author": "Verlaut",
+  "license": "AGPL-3.0-or-later"
+}
