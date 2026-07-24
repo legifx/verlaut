@@ -7,6 +7,7 @@ import {
   refreshDirectory,
   startChat,
   selectPeer,
+  closeChat,
   sendText,
   sendImage,
   sendAudio,
@@ -14,6 +15,20 @@ import {
 import type { StoredMessage } from "./store/db";
 import { mediaUrl, startRecording, type Recorder } from "./media";
 import { initUpdates, onUpdateAvailable, applyUpdate } from "./update";
+
+/** true auf schmalen Screens (Handy) — dann Ein-Spalten-Layout. */
+function useIsMobile(): boolean {
+  const [mobile, setMobile] = useState(
+    () => typeof matchMedia !== "undefined" && matchMedia("(max-width: 640px)").matches,
+  );
+  useEffect(() => {
+    const mq = matchMedia("(max-width: 640px)");
+    const on = () => setMobile(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return mobile;
+}
 
 export function App() {
   const booted = useApp((s) => s.booted);
@@ -112,6 +127,10 @@ function Chat() {
     if (tab === "people") refreshDirectory();
   }, [tab]);
 
+  const mobile = useIsMobile();
+  const showSidebar = !mobile || !activePeer;
+  const showMain = !mobile || !!activePeer;
+
   const peers = Object.keys(contacts);
   const active = activePeer ? messages[activePeer] || [] : [];
   const label = (pid: string) =>
@@ -119,7 +138,8 @@ function Chat() {
 
   return (
     <div style={S.app}>
-      <aside style={S.side}>
+      {showSidebar && (
+      <aside style={{ ...S.side, ...(mobile ? S.sideMobile : {}) }}>
         <div style={S.brand}>
           🔒 Verlaut
           <span title={connected ? "verbunden" : "offline"} style={{ ...S.dot, background: connected ? "#5cd6a0" : "#e0a05c" }} />
@@ -139,7 +159,9 @@ function Chat() {
           <PeopleList />
         )}
       </aside>
+      )}
 
+      {showMain && (
       <section style={S.main}>
         {!activePeer ? (
           <div style={S.placeholder}>
@@ -148,6 +170,11 @@ function Chat() {
         ) : (
           <>
             <div style={S.head}>
+              {mobile && (
+                <button style={S.back} onClick={closeChat} aria-label="Zurück">
+                  ←
+                </button>
+              )}
               {label(activePeer)} <span style={S.lock}>🔒 verschlüsselt</span>
             </div>
             <div style={S.thread}>
@@ -160,6 +187,7 @@ function Chat() {
           </>
         )}
       </section>
+      )}
     </div>
   );
 }
@@ -369,8 +397,10 @@ const S: Record<string, CSSProperties> = {
   updateBtn: { marginLeft: "auto", padding: "6px 12px", background: "white", color: "#1d4ed8", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" },
   updateDismiss: { padding: "6px 10px", background: "transparent", color: "white", border: "1px solid rgba(255,255,255,0.5)", borderRadius: 8, cursor: "pointer" },
 
-  app: { display: "flex", height: "100dvh", background: "radial-gradient(1200px 800px at 20% -10%, #16202c, #0b0f14)", color: "#e6edf3", fontFamily: "Inter, system-ui, sans-serif" },
+  app: { display: "flex", height: "100dvh", background: "radial-gradient(1200px 800px at 20% -10%, #16202c, #0b0f14)", color: "#e6edf3", fontFamily: "Inter, system-ui, sans-serif", paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" },
   side: { width: 260, minWidth: 220, borderRight: border, display: "flex", flexDirection: "column", background: "rgba(0,0,0,0.15)" },
+  sideMobile: { width: "100%", minWidth: 0, borderRight: "none" },
+  back: { width: 34, height: 34, marginRight: 4, borderRadius: "50%", border, background: "rgba(0,0,0,0.2)", color: "#e6edf3", fontSize: 18, cursor: "pointer", flex: "0 0 auto" },
   brand: { padding: "16px 18px", fontWeight: 700, display: "flex", alignItems: "center", gap: 8 },
   dot: { width: 9, height: 9, borderRadius: "50%", marginLeft: "auto" },
   meRow: { padding: "0 18px 10px", color: "#9fb0c0", fontSize: 13 },

@@ -256,6 +256,11 @@ export function selectPeer(peerId: string) {
   set({ activePeer: peerId });
 }
 
+/** Chat schließen (Mobile: zurück zur Liste). */
+export function closeChat() {
+  set({ activePeer: null });
+}
+
 async function sendPayload(peerId: string, payload: Payload) {
   await ensureSession(peerId);
   const bytes = encodePayload(payload);

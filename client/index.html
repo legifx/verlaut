@@ -8,6 +8,20 @@
     <!-- Sicherheit: Referrer minimieren; harte CSP setzt der Server per Header
          (self-only, keine externen Quellen). Siehe server ServeDir-Header. -->
     <meta name="referrer" content="no-referrer" />
+    <style>
+      /* Globaler Reset: kein weißer Body-Rand, volle Höhe, dunkler Grund bis in
+         die Safe-Areas (Notch/Statusleiste), keine horizontale Überlauf-Leiste. */
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; height: 100%; }
+      body {
+        background: #0b0f14;
+        overflow-x: hidden;
+        overscroll-behavior: none;
+        -webkit-text-size-adjust: 100%;
+      }
+      #root { height: 100%; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
