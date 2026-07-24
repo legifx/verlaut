@@ -1,4 +1,10 @@
 // WebSocket-Client: Auth-Handshake + Envelope-Zustellung.
+//
+// Robust für Mobile: automatischer Reconnect mit Backoff (Handys trennen den
+// WS beim Backgrounden/Bildschirm-aus) und eine Ausgangs-Warteschlange, damit
+// Nachrichten, die während einer kurzen Trennung gesendet werden, nach dem
+// Reconnect zugestellt werden. Der Server liefert beim (Re-)Connect ohnehin
+// alle gepufferten Envelopes erneut aus (durable Queue).
 import { decodeFrame, encodeFrame, EnvType } from "../proto/proto";
 
 export interface Inbound {
@@ -13,10 +19,20 @@ type Signer = (nonce: Uint8Array) => Uint8Array | Promise<Uint8Array>;
 const b64url = (u8: Uint8Array) =>
   btoa(String.fromCharCode(...u8)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
+interface Outgoing {
+  dest: Uint8Array;
+  isPrekey: boolean;
+  bodyB64: string;
+}
+
 export class VerlautWs {
   private ws?: WebSocket;
   private waiter?: (f: any) => void;
   private counter = 10;
+  private outbox: Outgoing[] = [];
+  private alive = false;
+  private backoff = 1000;
+  private reconnectTimer?: ReturnType<typeof setTimeout>;
 
   constructor(
     private identity: Uint8Array,
@@ -26,18 +42,69 @@ export class VerlautWs {
   ) {}
 
   async connect(): Promise<void> {
-    const url = location.origin.replace(/^http/, "ws") + "/v1/ws";
-    const ws = new WebSocket(url);
-    ws.binaryType = "arraybuffer";
-    this.ws = ws;
-    ws.onmessage = (ev) => this.route(new Uint8Array(ev.data as ArrayBuffer));
-    ws.onclose = () => this.onStatus(false);
-    await new Promise<void>((res, rej) => {
-      ws.onopen = () => res();
-      ws.onerror = () => rej(new Error("WS-Verbindung fehlgeschlagen"));
+    this.alive = true;
+    await this.open();
+  }
+
+  /** Sauber schließen (kein Reconnect mehr). */
+  close() {
+    this.alive = false;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    try {
+      this.ws?.close();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private open(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const url = location.origin.replace(/^http/, "ws") + "/v1/ws";
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(url);
+      } catch {
+        this.scheduleReconnect();
+        return resolve();
+      }
+      ws.binaryType = "arraybuffer";
+      this.ws = ws;
+      ws.onmessage = (ev) => this.route(new Uint8Array(ev.data as ArrayBuffer));
+      ws.onclose = () => {
+        this.onStatus(false);
+        this.scheduleReconnect();
+        resolve();
+      };
+      ws.onerror = () => {
+        /* onclose folgt und übernimmt den Reconnect */
+      };
+      ws.onopen = async () => {
+        try {
+          await this.handshake();
+          this.onStatus(true);
+          this.backoff = 1000;
+          this.flush();
+        } catch {
+          try {
+            ws.close();
+          } catch {
+            /* ignore */
+          }
+        }
+        resolve();
+      };
     });
-    await this.handshake();
-    this.onStatus(true);
+  }
+
+  private scheduleReconnect() {
+    if (!this.alive) return;
+    if (this.reconnectTimer) return;
+    const delay = this.backoff;
+    this.backoff = Math.min(this.backoff * 2, 15000);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined;
+      if (this.alive) void this.open();
+    }, delay);
   }
 
   private route(bytes: Uint8Array) {
@@ -83,21 +150,36 @@ export class VerlautWs {
     // serverAck / error: für v1 ignoriert (Zustellung ist durabel).
   }
 
-  /** Verschlüsselten Envelope an `dest` senden. `body` = base64url-Ciphertext. */
+  private isOpen(): boolean {
+    return !!this.ws && this.ws.readyState === WebSocket.OPEN;
+  }
+
+  /** Verschlüsselten Envelope an `dest` senden. Wird gepuffert und (spätestens
+   *  nach Reconnect) zugestellt. `body` = base64url-Ciphertext. */
   sendMessage(dest: Uint8Array, isPrekey: boolean, bodyB64: string) {
-    const ciphertext = Uint8Array.from(atob(bodyB64.replace(/-/g, "+").replace(/_/g, "/")), (c) =>
-      c.charCodeAt(0),
-    );
-    this.send({
-      id: ++this.counter,
-      outbound: {
-        version: 1,
-        type: isPrekey ? EnvType.PREKEY : EnvType.CIPHERTEXT,
-        destinationIdentityKey: dest,
-        sourceIdentityKey: this.identity,
-        destinationDeviceId: 1,
-        ciphertext,
-      },
-    });
+    this.outbox.push({ dest, isPrekey, bodyB64 });
+    this.flush();
+  }
+
+  private flush() {
+    if (!this.isOpen()) return;
+    while (this.outbox.length) {
+      const m = this.outbox.shift()!;
+      const ciphertext = Uint8Array.from(
+        atob(m.bodyB64.replace(/-/g, "+").replace(/_/g, "/")),
+        (c) => c.charCodeAt(0),
+      );
+      this.send({
+        id: ++this.counter,
+        outbound: {
+          version: 1,
+          type: m.isPrekey ? EnvType.PREKEY : EnvType.CIPHERTEXT,
+          destinationIdentityKey: m.dest,
+          sourceIdentityKey: this.identity,
+          destinationDeviceId: 1,
+          ciphertext,
+        },
+      });
+    }
   }
 }

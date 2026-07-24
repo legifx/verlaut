@@ -11,6 +11,7 @@ import {
   sendText,
   sendImage,
   sendAudio,
+  dismissToast,
 } from "./app/state";
 import type { StoredMessage } from "./store/db";
 import { mediaUrl, startRecording, type Recorder } from "./media";
@@ -41,8 +42,20 @@ export function App() {
   return (
     <>
       <UpdateBanner />
+      <Toast />
       {me ? <Chat /> : <Onboarding />}
     </>
+  );
+}
+
+function Toast() {
+  const toast = useApp((s) => s.toast);
+  if (!toast) return null;
+  return (
+    <div style={S.toast} onClick={() => dismissToast()} role="status">
+      <div style={S.toastTitle}>{toast.title}</div>
+      {toast.body && <div style={S.toastBody}>{toast.body}</div>}
+    </div>
   );
 }
 
@@ -394,6 +407,9 @@ const S: Record<string, CSSProperties> = {
   note: { marginTop: 18, color: "#7f95a8", fontSize: 12, lineHeight: 1.5 },
 
   update: { position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", background: "#1d4ed8", color: "white", fontSize: 13.5 },
+  toast: { position: "fixed", left: "50%", transform: "translateX(-50%)", top: "calc(env(safe-area-inset-top) + 12px)", zIndex: 60, width: "min(420px, calc(100% - 24px))", padding: "11px 15px", background: "rgba(20,28,38,0.97)", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 13, boxShadow: "0 10px 30px rgba(0,0,0,0.45)", cursor: "pointer", backdropFilter: "blur(8px)" },
+  toastTitle: { fontWeight: 700, fontSize: 14, color: "#e6edf3" },
+  toastBody: { marginTop: 2, fontSize: 13, color: "#b9c6d3", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   updateBtn: { marginLeft: "auto", padding: "6px 12px", background: "white", color: "#1d4ed8", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" },
   updateDismiss: { padding: "6px 10px", background: "transparent", color: "white", border: "1px solid rgba(255,255,255,0.5)", borderRadius: 8, cursor: "pointer" },
 

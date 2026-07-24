@@ -39,6 +39,7 @@ interface AppState {
   activePeer: string | null;
   messages: Record<string, StoredMessage[]>;
   error: string | null;
+  toast: { title: string; body: string } | null;
 }
 export const useApp = create<AppState>(() => ({
   booted: false,
@@ -49,9 +50,59 @@ export const useApp = create<AppState>(() => ({
   activePeer: null,
   messages: {},
   error: null,
+  toast: null,
 }));
 const set = useApp.setState;
 const get = useApp.getState;
+
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+/** Zeigt einen kurzen In-App-Hinweis (Fehler oder neue Nachricht). */
+export function showToast(title: string, body: string) {
+  set({ toast: { title, body } });
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => set({ toast: null }), 4500);
+}
+export function dismissToast() {
+  if (toastTimer) clearTimeout(toastTimer);
+  set({ toast: null });
+}
+
+/** Best-effort: Berechtigung für System-Benachrichtigungen anfragen. */
+export function requestNotifications() {
+  try {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      void Notification.requestPermission();
+    }
+  } catch {
+    /* nicht verfügbar (z. B. WebView) -> In-App-Banner reicht */
+  }
+}
+
+function preview(p: Payload): string {
+  if (p.kind === "image") return "📷 Bild";
+  if (p.kind === "audio") return "🎤 Sprachnachricht";
+  return p.text || "";
+}
+
+/** Benachrichtigt über eine eingehende Nachricht: System-Notification, falls
+ *  erlaubt und die App im Hintergrund ist — sonst ein In-App-Banner. */
+function notifyIncoming(peerId: string, p: Payload) {
+  const name = get().contacts[peerId]?.username || get().directory.find((d) => d.peerId === peerId)?.username || "Neue Nachricht";
+  const title = name.startsWith("@") || name === "Neue Nachricht" ? name : "@" + name;
+  const body = preview(p);
+  const hidden = typeof document !== "undefined" && document.hidden;
+  const activeAndVisible = get().activePeer === peerId && !hidden;
+  if (activeAndVisible) return; // schaut den Chat gerade an
+  try {
+    if (typeof Notification !== "undefined" && Notification.permission === "granted" && hidden) {
+      new Notification(title, { body, tag: peerId });
+      return;
+    }
+  } catch {
+    /* fällt auf Banner zurück */
+  }
+  showToast(title, body);
+}
 
 // ---- HTTP (same-origin) ----
 async function post(path: string, body: unknown, headers: Record<string, string> = {}) {
@@ -106,6 +157,7 @@ async function handleInbound(m: Inbound) {
       if (!uname) void refreshDirectory();
     }
     await appendMessage(peerId, payloadToStored(peerId, "in", payload));
+    notifyIncoming(peerId, payload);
   } catch (e) {
     console.error("Entschlüsselung fehlgeschlagen", e);
   }
@@ -161,6 +213,7 @@ export async function boot() {
       await registerFreshPreKeys(); // frische PreKeys (alte In-Memory sind weg)
       await connectWs();
       await refreshDirectory();
+      requestNotifications();
     } catch (e: any) {
       set({ error: String(e?.message || e) });
     }
@@ -262,40 +315,38 @@ export function closeChat() {
 }
 
 async function sendPayload(peerId: string, payload: Payload) {
-  await ensureSession(peerId);
-  const bytes = encodePayload(payload);
-  const enc = JSON.parse(client!.encrypt(peerIdentity[peerId], bytes, Date.now()));
-  ws!.sendMessage(peerIdentity[peerId], enc.isPrekey, enc.body);
-  await appendMessage(peerId, payloadToStored(peerId, "out", payload));
+  if (!peerIdentity[peerId]) {
+    showToast("Senden fehlgeschlagen", "Kontakt unbekannt — bitte neu öffnen.");
+    return;
+  }
+  try {
+    await ensureSession(peerId);
+    const bytes = encodePayload(payload);
+    const enc = JSON.parse(client!.encrypt(peerIdentity[peerId], bytes, Date.now()));
+    // Bubble sofort anzeigen — die Nachricht ist verschlüsselt und wird
+    // zugestellt (bzw. nach Reconnect aus der Warteschlange nachgesendet).
+    await appendMessage(peerId, payloadToStored(peerId, "out", payload));
+    ws?.sendMessage(peerIdentity[peerId], enc.isPrekey, enc.body);
+  } catch (e: any) {
+    showToast("Senden fehlgeschlagen", String(e?.message || e));
+  }
 }
 
 export async function sendText(text: string) {
   const peerId = get().activePeer;
   if (!peerId || !text.trim()) return;
-  try {
-    await sendPayload(peerId, { kind: "text", text });
-  } catch (e: any) {
-    set({ error: String(e?.message || e) });
-  }
+  await sendPayload(peerId, { kind: "text", text });
 }
 
 export async function sendImage(file: File) {
   const peerId = get().activePeer;
   if (!peerId) return;
-  try {
-    const img = await downscaleImage(file);
-    await sendPayload(peerId, { kind: "image", mime: img.mime, name: img.name, bytes: img.bytes });
-  } catch (e: any) {
-    set({ error: String(e?.message || e) });
-  }
+  const img = await downscaleImage(file);
+  await sendPayload(peerId, { kind: "image", mime: img.mime, name: img.name, bytes: img.bytes });
 }
 
 export async function sendAudio(bytes: Uint8Array, mime: string, dur: number) {
   const peerId = get().activePeer;
   if (!peerId) return;
-  try {
-    await sendPayload(peerId, { kind: "audio", mime, dur, bytes });
-  } catch (e: any) {
-    set({ error: String(e?.message || e) });
-  }
+  await sendPayload(peerId, { kind: "audio", mime, dur, bytes });
 }
