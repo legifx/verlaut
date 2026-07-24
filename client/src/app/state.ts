@@ -102,6 +102,8 @@ async function handleInbound(m: Inbound) {
       const uname = get().directory.find((d) => d.peerId === peerId)?.username || "";
       set((s) => ({ contacts: { ...s.contacts, [peerId]: { username: uname } } }));
       store.saveContact({ peerId, username: uname, identity: m.source });
+      // Absender noch namenlos? Directory neu laden, um den @username zu füllen.
+      if (!uname) void refreshDirectory();
     }
     await appendMessage(peerId, payloadToStored(peerId, "in", payload));
   } catch (e) {
@@ -206,6 +208,22 @@ export async function refreshDirectory() {
     }
     directory.sort((a, b) => a.username.localeCompare(b.username));
     set({ directory });
+    // Namen für bereits bekannte Kontakte nachtragen (z. B. wenn zuerst eine
+    // Nachricht von einem noch unbenannten Absender kam).
+    set((s) => {
+      const contacts = { ...s.contacts };
+      let changed = false;
+      for (const d of directory) {
+        if (contacts[d.peerId] && contacts[d.peerId].username !== d.username) {
+          contacts[d.peerId] = { username: d.username };
+          if (peerIdentity[d.peerId]) {
+            store.saveContact({ peerId: d.peerId, username: d.username, identity: peerIdentity[d.peerId] });
+          }
+          changed = true;
+        }
+      }
+      return changed ? { contacts } : {};
+    });
   } catch {
     /* offline / kein Directory -> ignorieren */
   }

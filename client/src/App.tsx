@@ -99,7 +99,10 @@ function Onboarding() {
 
 function Chat() {
   const { me, contacts, directory, activePeer, messages, connected } = useApp();
-  const [tab, setTab] = useState<"chats" | "people">("chats");
+  // Ohne Chats direkt „Alle Nutzer" zeigen, damit man sofort jemanden findet.
+  const [tab, setTab] = useState<"chats" | "people">(() =>
+    Object.keys(useApp.getState().contacts).length ? "chats" : "people",
+  );
   const [text, setText] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -189,6 +192,12 @@ function ChatsList({
 function PeopleList() {
   const directory = useApp((s) => s.directory);
   const [q, setQ] = useState("");
+  // Live-Aktualisierung: neu registrierte Nutzer erscheinen ohne Reload.
+  useEffect(() => {
+    refreshDirectory();
+    const t = setInterval(refreshDirectory, 8000);
+    return () => clearInterval(t);
+  }, []);
   const filtered = directory.filter((d) => d.username.includes(q.trim().toLowerCase()));
   return (
     <>
